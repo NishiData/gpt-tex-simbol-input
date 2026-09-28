@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TeX記号入力</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="symbols.js" defer></script>
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header><strong>TeX 記号入力</strong><span class="hint">v1.1</span></header>
+  <div class="settings">
+    <label><input id="enabled" type="checkbox" checked> スペースで記号に変換</label>
+    <label><input id="preview-enabled" type="checkbox" checked> 入力中の数式をプレビュー</label>
+    <label class="mode-label" for="preview-mode">プレビューする範囲</label>
+    <select id="preview-mode">
+      <option value="auto">自動（数式だけならそのまま）</option>
+      <option value="math">入力全体を数式として表示</option>
+      <option value="mixed">$…$ などで囲んだ数式のみ</option>
+    </select>
+  </div>
+  <p><code>\alpha</code> ＋ <kbd>Space</kbd> → <b>α</b></p>
+  <p class="hint">空白も入れたいときは、もう一度Space。<br><code>\frac{a}{b}</code> は入力中にプレビュー。<br>文章中の数式は <code>$…$</code> で囲みます。</p>
+  <input id="search" type="search" placeholder="コマンド・記号を検索" aria-label="コマンド・記号を検索">
+  <div id="count" class="hint" aria-live="polite"></div>
+  <div class="list"><table><thead><tr><th>コマンド</th><th>変換後</th></tr></thead><tbody id="symbols"></tbody></table></div>
+  <footer>TeXのまま残す場合は Shift＋Space。<br>日本語の変換中は記号に変換しません。<br>表示した数式は入力に合わせて更新されます。</footer>
+</body>
+</html>

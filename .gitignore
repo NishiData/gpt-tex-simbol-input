@@ -1,0 +1,18 @@
+# Local dependencies and test browsers
+node_modules/
+.preview-dev/
+playwright-report/
+test-results/
+screenshots/
+
+# Generated distribution files
+dist/
+*.zip
+
+# Local settings and OS files
+.env
+.env.*
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

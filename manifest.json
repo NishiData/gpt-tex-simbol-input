@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "TeX Symbol Input for ChatGPT",
+  "version": "1.1.0",
+  "description": "TeXコマンドを記号に変換し、入力中の分数・添字・行列をその場でプレビューします。",
+  "minimum_chrome_version": "109",
+  "permissions": ["storage"],
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+    "js": ["symbols.js", "content.js", "vendor/katex/katex.min.js", "preview-core.js", "preview.js"],
+    "run_at": "document_idle"
+  }],
+  "action": {
+    "default_title": "TeX記号入力",
+    "default_popup": "popup.html"
+  }
+}

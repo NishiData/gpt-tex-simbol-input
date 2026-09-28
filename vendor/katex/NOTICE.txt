@@ -1,0 +1,11 @@
+KaTeX 0.18.9
+https://katex.org/
+https://github.com/KaTeX/KaTeX
+MIT license; see LICENSE in this directory.
+
+Source package: https://registry.npmjs.org/katex/-/katex-0.18.9.tgz
+npm integrity: sha512-8ad9RyoKsb/g8/yLFE+KAlP+DhbCTRUNi/V9XGsxn0R+trJJltNwzcDNo0q/DEkOy5fQUQTAQyCXCYSE+OakTQ==
+
+Only the bundled renderer is included. MathML output uses the browser's native
+math layout. No CDN, remote scripts, external fonts, or remote math service
+are used at runtime. Browser layout and installed fonts affect appearance.
