@@ -146,8 +146,62 @@ assert.deepEqual(opened,['chrome-extension://test-extension/bookmarks.html']);
     await manager.setViewportSize({width:390,height:844});
     await manager.screenshot({path:path.join(process.env.TEX_SCREENSHOT_DIR,'bookmarks-narrow.png'),fullPage:true});
   }
+  // Reproduce the reported Work condition: no assistant markers, eight TeX annotations.
+  const work=await context.newPage(); work.on('pageerror',e=>errors.push(e.message));
+  await work.goto('https://chatgpt.com/c/work-test');
+  await work.evaluate(()=>{document.body.innerHTML='<main id="work-messages"></main>';});
+  for(const file of manifest.content_scripts[0].js) await work.addScriptTag({path:path.join(root,file)});
+  await work.evaluate(()=>{
+    for(let i=1;i<=8;i++) {
+      const message=document.createElement('section');
+      message.id='work-formula-'+i;document.getElementById('work-messages').append(message);
+      katex.render('x_{'+i+'}',message,{output:'mathml',displayMode:true});
+    }
+  });
+  assert.equal(await work.locator('[data-message-author-role="assistant"]').count(),0);
+  assert.equal(await work.locator('annotation[encoding="application/x-tex"]').count(),8);
+  const floating=work.locator('#tex-bookmark-fallback');
+  await floating.getByRole('button',{name:'数式を保存（8）',exact:true}).waitFor();
+  const box=await floating.boundingBox();
+  assert(box && box.x>=0 && box.y>=0 && box.x+box.width<=1100 && box.y+box.height<=850,'fallback stays in the viewport');
+  assert.equal(Object.keys(stored).length,2,'discovery does not store page contents');
+  assert.equal(await work.getByRole('button',{name:'☆ 回答を保存',exact:true}).count(),0,'unknown boundary never saves the whole page as an answer');
+  await floating.getByRole('button',{name:'数式を保存（8）',exact:true}).click();
+  const workUI=work.locator('#tex-bookmark-ui');
+  assert.equal(await workUI.locator('option').count(),8);
+  await workUI.getByLabel('保存する数式（8個）').selectOption('7');
+  assert.equal(await workUI.locator('pre').innerText(),'x_{8}');
+  await workUI.getByLabel('名前',{exact:true}).fill('Workの8番目の式');
+  await workUI.getByRole('button',{name:'保存',exact:true}).click();
+  await work.waitForFunction(()=>!document.querySelector('#tex-bookmark-ui').shadowRoot.querySelector('dialog').open);
+  const workRecord=Object.values(stored).find(r=>r.title==='Workの8番目の式');
+  assert(workRecord);assert.equal(workRecord.text,'x_{8}');assert.equal(workRecord.kind,'formula');
+  assert.equal(workRecord.messageId,'');assert.equal(workRecord.sourceUrl,'https://chatgpt.com/c/work-test');
+  await floating.getByRole('button',{name:'一覧',exact:true}).click();
+  assert.deepEqual(await work.evaluate(()=>testMessage),{action:'openBookmarks'});
+  await work.evaluate(id=>{location.hash='tex-bookmark='+id;},workRecord.id);
+  await work.waitForFunction(()=>document.querySelector('#tex-bookmark-ui').shadowRoot.querySelector('.toast').textContent.includes('移動しました'));
+  // Repeated math, code examples and editing fields do not add choices.
+  await work.evaluate(()=>{
+    for(const [tag,editable,tex] of [['div',false,'x_{1}'],['code',false,'code_only'],['div',true,'draft_only']]) {
+      const el=document.createElement(tag); if(editable) el.contentEditable='true';
+      document.getElementById('work-messages').append(el);katex.render(tex,el,{output:'mathml'});
+    }
+    window.testUpdates=setInterval(()=>document.getElementById('work-messages').append(document.createTextNode('.')),40);
+    const el=document.createElement('section');document.getElementById('work-messages').append(el);
+    katex.render('x_{9}',el,{output:'mathml'});
+  });
+  await floating.getByRole('button',{name:'数式を保存（9）',exact:true}).waitFor({timeout:2000});
+  await work.evaluate(()=>clearInterval(window.testUpdates));
+  // If the host removes our floating panel, it is re-created without duplication.
+  await work.evaluate(()=>document.querySelector('#tex-bookmark-fallback').remove());
+  await floating.getByRole('button',{name:'数式を保存（9）',exact:true}).waitFor();
+  assert.equal(await floating.count(),1);
+  await work.evaluate(()=>document.getElementById('work-messages').replaceChildren());
+  await floating.waitFor({state:'hidden'});
+  assert.equal(Object.keys(stored).length,3,'only the chosen formula was saved');
   assert.deepEqual(requests,[],'no external resources requested');
   assert.deepEqual(errors,[],'no uncaught browser errors');
-  console.log('Chromium '+browser.version()+': bookmark save, TeX extraction, quota errors, search/filter, copy, rename, persistence, source jump, delete, backup/restore, dynamic answers and safe text passed.');
+  console.log('Chromium '+browser.version()+': existing bookmarks plus Work 0-answer/8-formula fallback, choice/save/list/jump, exclusions, streaming, panel recovery and cleanup passed.');
   await browser.close();
 })().catch(e=>{console.error(e);process.exit(1);});

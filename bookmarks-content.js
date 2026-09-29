@@ -6,8 +6,9 @@
   const bars = new WeakMap();
   const styleText = `
     :host { font:13px/1.6 system-ui,sans-serif; color-scheme:light dark; }
-    * { box-sizing:border-box; } [hidden] { display:none!important; }
+    * { box-sizing:border-box; } :host([hidden]),[hidden] { display:none!important; }
     .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:12px 0; }
+    .floating { max-width:calc(100vw - 32px); padding:10px 12px; border:1px solid #8886; border-radius:12px; background:Canvas; color:CanvasText; box-shadow:0 4px 18px #0002; }
     button,a,input,select { font:inherit; } button { cursor:pointer; }
     button,a { color:inherit; } .bar button,.bar a { background:transparent; border:1px solid #8886; border-radius:7px; padding:4px 9px; text-decoration:none; }
     button:disabled { opacity:.55; cursor:wait; } :focus-visible { outline:3px solid #29a586; outline-offset:2px; }
@@ -45,15 +46,19 @@
     ensureUI(); toast.textContent = message; toast.hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 6500);
   }
-  function formulas(answer) {
+  function formulaEntries(answer) {
     const result = [], seen = new Set();
     for (const annotation of answer.querySelectorAll('annotation[encoding="application/x-tex"]')) {
-      if (annotation.closest("pre,code")) continue;
+      if (annotation.closest('pre,code,[contenteditable]:not([contenteditable="false"]),#tex-symbol-preview-host,#tex-bookmark-ui,#tex-bookmark-fallback')) continue;
       const tex = annotation.textContent.trim();
-      if (tex && !seen.has(tex)) { result.push(tex); seen.add(tex); }
+      if (tex && !seen.has(tex)) {
+        result.push({text:tex, element:annotation.closest('.katex-display,.katex,math') || annotation.parentElement});
+        seen.add(tex);
+      }
     }
     return result;
   }
+  function formulas(answer) { return formulaEntries(answer).map(entry => entry.text); }
   function answerText(answer) {
     const clone = answer.cloneNode(true);
     clone.querySelectorAll(".tex-bookmark-bar,script,style,button,svg,[aria-hidden='true']").forEach(el => el.remove());
@@ -81,12 +86,14 @@
     return {sourceUrl:B.sourceURL(location.href), sourceTitle:document.title, messageId:message?.getAttribute("data-message-id") || ""};
   }
   function openSave(answer, kind) {
-    const values = kind === "formula" ? formulas(answer) : [answerText(answer)];
+    const entries = kind === "formula" ? formulaEntries(answer) : [{text:answerText(answer), element:answer}];
+    const values = entries.map(entry => entry.text);
     if (!values.length || !values[0].trim()) {
       notify(kind === "formula" ? "TeX原文を取得できる数式がありません。回答全体は「回答を保存」で保存できます。" : "保存できる回答がまだありません。"); return;
     }
     ensureUI(); if (dialog.open) return;
-    const origin = source(answer), form = node("form");
+    let origin = source(entries[0].element);
+    const form = node("form");
     const heading = node("h2", kind === "formula" ? "数式をブックマーク" : "回答をブックマーク");
     const titleLabel = node("label", "名前"), title = node("input");
     title.id = "bookmark-title"; titleLabel.htmlFor = title.id; title.maxLength = 120; title.required = true;
@@ -96,7 +103,9 @@
     const cancel = node("button", "キャンセル"); cancel.type = "button"; cancel.addEventListener("click", () => dialog.close());
     let text = values[0], titleEdited = false;
     title.addEventListener("input", () => { titleEdited = true; });
-    function select(value) {
+    function select(index) {
+      const value = values[index];
+      origin = source(entries[index].element);
       text = value; raw.textContent = value;
       if (!titleEdited) title.value = value.replace(/\s+/g, " ").slice(0, 90);
       preview.hidden = kind !== "formula";
@@ -110,7 +119,7 @@
       const label = node("label", `保存する数式（${values.length}個）`), chooser = node("select");
       chooser.id = "bookmark-formula"; label.htmlFor = chooser.id;
       values.forEach((value, i) => { const option = node("option", `${i + 1}. ${value.slice(0, 100)}`); option.value = String(i); chooser.append(option); });
-      chooser.addEventListener("change", () => select(values[Number(chooser.value)]));
+      chooser.addEventListener("change", () => select(Number(chooser.value)));
       form.append(label, chooser);
     }
     const actions = node("div", null, "actions"); actions.append(cancel, submit);
@@ -124,7 +133,38 @@
       } catch (e) { error.textContent = e.message; }
       finally { submit.disabled = false; cancel.disabled = false; }
     });
-    select(text); dialog.replaceChildren(form); dialog.showModal(); title.focus(); title.select();
+    select(0); dialog.replaceChildren(form); dialog.showModal(); title.focus(); title.select();
+  }
+  function listButton() {
+    const list = node("button", "一覧"); list.type = "button";
+    list.addEventListener("click", () => {
+      try {
+        chrome.runtime.sendMessage({action:"openBookmarks"}, response => {
+          if (chrome.runtime.lastError || !response?.ok) notify("一覧を開けませんでした。拡張アイコンから開くか、ページを再読み込みしてください。");
+        });
+      } catch { notify("ページを再読み込みしてから、一覧を開いてください。"); }
+    });
+    return list;
+  }
+  let fallback, fallbackSave;
+  function updateFallback(answers) {
+    // Unknown message markup: offer formulas only, never treat the whole page as an answer.
+    const count = answers.length ? 0 : formulaEntries(document.body).length;
+    if (!count) { if (fallback) fallback.hidden = true; return; }
+    if (!fallback?.isConnected) {
+      fallback = node("div"); fallback.id = "tex-bookmark-fallback";
+      Object.assign(fallback.style, {position:"fixed", right:"16px", bottom:"110px", zIndex:"2147483646"});
+      const root = shadow(fallback), bar = node("div", null, "bar floating");
+      fallbackSave = node("button"); fallbackSave.type = "button";
+      fallbackSave.title = "このページに読み込み済みの数式から選んで保存します";
+      fallbackSave.addEventListener("click", () => {
+        try { openSave(document.body, "formula"); }
+        catch { notify("保存画面を開けませんでした。ページを再読み込みしてください。"); }
+      });
+      bar.append(fallbackSave, listButton()); root.append(bar); document.body.append(fallback);
+    }
+    fallbackSave.textContent = `数式を保存（${count}）`;
+    fallback.hidden = false;
   }
   function install(answer) {
     if (bars.get(answer)?.isConnected) return;
@@ -135,24 +175,20 @@
       button.addEventListener("click", () => { try { openSave(answer, kind); } catch { notify("保存画面を開けませんでした。ページを再読み込みしてください。"); } });
       bar.append(button);
     }
-    const list = node("button", "一覧"); list.type = "button";
-    list.addEventListener("click", () => {
-      try {
-        chrome.runtime.sendMessage({action:"openBookmarks"}, response => {
-          if (chrome.runtime.lastError || !response?.ok) notify("一覧を開けませんでした。拡張アイコンから開くか、ページを再読み込みしてください。");
-        });
-      } catch { notify("ページを再読み込みしてから、一覧を開いてください。"); }
-    });
-    bar.append(list); root.append(bar); answer.append(host); bars.set(answer, host);
+    bar.append(listButton()); root.append(bar); answer.append(host); bars.set(answer, host);
   }
   let scanTimer, jump = null, jumpTimer;
   function scan() {
     const answers = Array.from(document.querySelectorAll(ANSWERS));
     for (const answer of answers) install(answer);
+    updateFallback(answers);
     if (!jump) return;
     let target = jump.messageId ? answers.find(a => source(a).messageId === jump.messageId) : null;
     // Use an exact saved snippet only when a message ID was unavailable.
     if (!target && !jump.messageId) target = answers.find(a => jump.kind === "formula" ? formulas(a).includes(jump.text) : answerText(a).includes(jump.text.slice(0, 160)));
+    if (!target && !jump.messageId && jump.kind === "formula") {
+      target = formulaEntries(document.body).find(entry => entry.text === jump.text)?.element;
+    }
     if (target) {
       jump = null; clearTimeout(jumpTimer);
       target.scrollIntoView({behavior:"smooth", block:"center"});
@@ -171,9 +207,10 @@
     } catch (e) { notify(e.message); }
   }
   const observer = new MutationObserver(() => {
-    clearTimeout(scanTimer); scanTimer = setTimeout(scan, 350);
+    // Do not postpone forever while the site keeps streaming or animating.
+    if (!scanTimer) scanTimer = setTimeout(() => { scanTimer = null; scan(); }, 350);
   });
-  observer.observe(document.body, {childList:true, subtree:true});
+  observer.observe(document.body, {childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:["data-message-author-role"]});
   window.addEventListener("hashchange", followBookmark);
   scan(); followBookmark();
 })();
