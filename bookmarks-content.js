@@ -13,9 +13,25 @@
     button,a { color:inherit; } .bar button,.bar a { background:transparent; border:1px solid #8886; border-radius:7px; padding:4px 9px; text-decoration:none; }
     button:disabled { opacity:.55; cursor:wait; } :focus-visible { outline:3px solid #29a586; outline-offset:2px; }
     dialog { width:min(600px,calc(100vw - 28px)); max-height:85vh; overflow:auto; border:1px solid #8886; border-radius:16px; padding:24px; background:Canvas; color:CanvasText; box-shadow:0 18px 70px #0004; }
+    dialog.formula-dialog { width:min(820px,calc(100vw - 28px)); }
     dialog::backdrop { background:#0007; } h2 { font-size:20px; margin:0 0 18px; }
     label { display:block; margin:12px 0 5px; } input,select { width:100%; padding:9px; border:1px solid #8887; border-radius:7px; background:Field; color:FieldText; }
     .preview { padding:18px 0; overflow:auto; font-size:22px; }
+    .picker-toggle { width:100%; display:flex; gap:12px; align-items:center; justify-content:space-between; padding:10px; border:1px solid #8887; border-radius:7px; background:Field; color:FieldText; text-align:left; }
+    .picker-value { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .picker-panel { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); margin-top:6px; border:1px solid #8887; border-radius:9px; overflow:hidden; }
+    .picker-list { min-width:0; height:min(36vh,340px); overflow-y:auto; overscroll-behavior:contain; padding:4px; }
+    .picker-option { padding:8px 10px; border-radius:5px; cursor:pointer; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .picker-option[aria-selected="true"] { box-shadow:inset 3px 0 #16755c; font-weight:600; }
+    .picker-option[data-active] { background:#16755c; color:white; }
+    .picker-inspect { min-width:0; max-height:min(36vh,340px); overflow:auto; padding:12px; border-left:1px solid #8885; }
+    .picker-inspect strong { display:block; font-size:12px; margin-bottom:12px; }
+    .picker-math { font-size:22px; overflow:auto; padding:12px 2px; }
+    @media(max-width:600px) {
+      .picker-panel { grid-template-columns:minmax(0,1fr); }
+      .picker-list { height:22vh; }
+      .picker-inspect { max-height:20vh; border-left:0; border-top:1px solid #8885; }
+    }
     pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:190px; overflow:auto; font:12px/1.6 ui-monospace,monospace; background:#8881; padding:12px; border-radius:8px; }
     .hint { font-size:12px; opacity:.75; } .actions { display:flex; gap:10px; justify-content:flex-end; }
     .actions button { padding:8px 16px; border:1px solid #8887; border-radius:8px; background:ButtonFace; color:ButtonText; }
@@ -92,6 +108,7 @@
       notify(kind === "formula" ? "TeX原文を取得できる数式がありません。回答全体は「回答を保存」で保存できます。" : "保存できる回答がまだありません。"); return;
     }
     ensureUI(); if (dialog.open) return;
+    dialog.classList.toggle("formula-dialog", kind === "formula");
     let origin = source(entries[0].element);
     const form = node("form");
     const heading = node("h2", kind === "formula" ? "数式をブックマーク" : "回答をブックマーク");
@@ -101,7 +118,7 @@
     const error = node("p", "", "status"); error.setAttribute("role", "status");
     const submit = node("button", "保存", "save"); submit.type = "submit";
     const cancel = node("button", "キャンセル"); cancel.type = "button"; cancel.addEventListener("click", () => dialog.close());
-    let text = values[0], titleEdited = false;
+    let text = values[0], titleEdited = false, setPickerValue = () => {};
     title.addEventListener("input", () => { titleEdited = true; });
     function select(index) {
       const value = values[index];
@@ -113,14 +130,68 @@
       const tooLong = value.length > (kind === "formula" ? B.MAX_TEX : B.MAX_TEXT);
       error.textContent = tooLong ? "保存上限を超えています（回答10万文字・数式8,000文字）。" : "";
       submit.disabled = tooLong;
+      setPickerValue(index);
     }
     form.append(heading);
     if (kind === "formula") {
-      const label = node("label", `保存する数式（${values.length}個）`), chooser = node("select");
-      chooser.id = "bookmark-formula"; label.htmlFor = chooser.id;
-      values.forEach((value, i) => { const option = node("option", `${i + 1}. ${value.slice(0, 100)}`); option.value = String(i); chooser.append(option); });
-      chooser.addEventListener("change", () => select(Number(chooser.value)));
-      form.append(label, chooser);
+      const label = node("label", `保存する数式（${values.length}個）`), picker = node("div");
+      label.id = "bookmark-formula-label";
+      const chooser = node("button", null, "picker-toggle"), choiceText = node("span", "", "picker-value");
+      chooser.id = "bookmark-formula"; chooser.type = "button"; label.htmlFor = chooser.id;
+      chooser.setAttribute("aria-labelledby", label.id); chooser.setAttribute("aria-haspopup", "listbox");
+      chooser.setAttribute("aria-expanded", "false"); chooser.setAttribute("aria-controls", "bookmark-formula-list");
+      const arrow = node("span", "▾"); arrow.setAttribute("aria-hidden", "true"); chooser.append(choiceText, arrow);
+      const panel = node("div", null, "picker-panel"); panel.hidden = true;
+      const list = node("div", null, "picker-list"); list.id = "bookmark-formula-list";
+      list.tabIndex = -1; list.setAttribute("role", "listbox"); list.setAttribute("aria-labelledby", label.id);
+      const inspect = node("div", null, "picker-inspect"), inspectTitle = node("strong", "プレビュー");
+      const inspectMath = node("div", null, "picker-math"); inspect.setAttribute("aria-label", "カーソル位置の数式プレビュー");
+      inspect.append(inspectTitle, inspectMath, node("p", "クリックで選択。↑↓で確認、Enterで選択できます。", "hint"));
+      panel.append(list, inspect); picker.append(chooser, panel);
+      let selected = 0, active = -1;
+      const options = values.map((value, i) => {
+        const option = node("div", `${i + 1}. ${value.slice(0, 160)}`, "picker-option");
+        option.id = `bookmark-formula-option-${i}`; option.tabIndex = -1; option.setAttribute("role", "option");
+        option.addEventListener("pointerenter", () => activate(i));
+        option.addEventListener("click", () => { select(i); closePicker(true); });
+        list.append(option); return option;
+      });
+      function activate(index, scroll = false) {
+        if (active !== index) {
+          if (active >= 0) options[active].removeAttribute("data-active");
+          active = index; options[index].setAttribute("data-active", "");
+          list.setAttribute("aria-activedescendant", options[index].id);
+          inspectTitle.textContent = `数式 ${index + 1} のプレビュー`;
+          B.renderFormula(values[index], inspectMath);
+        }
+        if (scroll) options[index].scrollIntoView({block:"nearest"});
+      }
+      function openPicker() {
+        panel.hidden = false; preview.hidden = true; chooser.setAttribute("aria-expanded", "true");
+        activate(selected, true); list.focus({preventScroll:true});
+      }
+      function closePicker(focus = false) {
+        panel.hidden = true; preview.hidden = false; chooser.setAttribute("aria-expanded", "false");
+        if (focus) chooser.focus({preventScroll:true});
+      }
+      setPickerValue = index => {
+        selected = index; choiceText.textContent = `${index + 1}. ${values[index]}`;
+        options.forEach((option, i) => option.setAttribute("aria-selected", String(i === index)));
+      };
+      chooser.addEventListener("click", () => panel.hidden ? openPicker() : closePicker(true));
+      chooser.addEventListener("keydown", event => {
+        if (["ArrowDown", "ArrowUp"].includes(event.key)) { event.preventDefault(); openPicker(); }
+      });
+      list.addEventListener("keydown", event => {
+        if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+          event.preventDefault();
+          activate(event.key === "Home" ? 0 : event.key === "End" ? values.length - 1 : Math.max(0, Math.min(values.length - 1, active + (event.key === "ArrowDown" ? 1 : -1))), true);
+        } else if (["Enter", " "].includes(event.key)) { event.preventDefault(); select(active); closePicker(true); }
+        else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closePicker(true); }
+      });
+      picker.addEventListener("focusout", event => { if (event.relatedTarget && !picker.contains(event.relatedTarget)) closePicker(); });
+      form.addEventListener("pointerdown", event => { if (!picker.contains(event.target)) closePicker(); });
+      form.append(label, picker);
     }
     const actions = node("div", null, "actions"); actions.append(cancel, submit);
     form.append(titleLabel, title, preview, raw,
