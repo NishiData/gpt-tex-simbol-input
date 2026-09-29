@@ -129,6 +129,9 @@ const storageShim = () => {
   assert.equal(await popup.evaluate(()=>testSettings.previewEnabled),false);
   await popup.locator('#preview-mode').selectOption('mixed');
   assert.equal(await popup.evaluate(()=>testSettings.previewMode),'mixed');
+  await popup.locator('#completion-enabled').uncheck();
+  assert.equal(await popup.evaluate(()=>testSettings.completionEnabled),false);
+  assert.equal(await popup.getByRole('link',{name:'数式の差分比較を開く'}).getAttribute('href'),'compare.html');
   console.log('Chromium '+browser.version()+': rich text, textarea, live preview, IME guard, settings, popup, layout and no external requests passed.');
   await browser.close();
 })().catch(error => {console.error(error); process.exit(1);});

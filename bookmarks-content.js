@@ -217,6 +217,14 @@
     });
     return list;
   }
+  function compareButton(answer) {
+    const button = node("button", "数式を比較"); button.type = "button";
+    button.addEventListener("click", () => {
+      try { globalThis.TEX_DIFF_UI.open(formulas(document.body), formulas(answer)[0]); }
+      catch { notify("比較画面を開けませんでした。ページを再読み込みしてください。"); }
+    });
+    return button;
+  }
   let fallback, fallbackSave;
   function updateFallback(answers) {
     // Unknown message markup: offer formulas only, never treat the whole page as an answer.
@@ -232,7 +240,7 @@
         try { openSave(document.body, "formula"); }
         catch { notify("保存画面を開けませんでした。ページを再読み込みしてください。"); }
       });
-      bar.append(fallbackSave, listButton()); root.append(bar); document.body.append(fallback);
+      bar.append(fallbackSave, compareButton(document.body), listButton()); root.append(bar); document.body.append(fallback);
     }
     fallbackSave.textContent = `数式を保存（${count}）`;
     fallback.hidden = false;
@@ -246,7 +254,7 @@
       button.addEventListener("click", () => { try { openSave(answer, kind); } catch { notify("保存画面を開けませんでした。ページを再読み込みしてください。"); } });
       bar.append(button);
     }
-    bar.append(listButton()); root.append(bar); answer.append(host); bars.set(answer, host);
+    bar.append(compareButton(answer), listButton()); root.append(bar); answer.append(host); bars.set(answer, host);
   }
   let scanTimer, jump = null, jumpTimer;
   function scan() {

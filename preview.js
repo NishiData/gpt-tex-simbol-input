@@ -112,6 +112,7 @@
   }
 
   function render() {
+    if (globalThis.TEX_COMPLETION?.isOpen()) { hide(); return; }
     if (!enabled || !editor?.isConnected || composing) { if (!enabled || !editor?.isConnected) hide(); return; }
     const text = editor instanceof HTMLTextAreaElement ? editor.value : editor.innerText;
     if (!text?.trim()) { previous = null; hide(); return; }
@@ -172,6 +173,7 @@
     if (event.key === "Enter" && editorFor(event.target)) setTimeout(render, 200);
   }, true);
   document.addEventListener("selectionchange", () => { if (editor && !composing) schedule(); });
+  document.addEventListener("tex-completion-visibility", schedule);
   window.addEventListener("resize", geometry, {passive: true});
   window.addEventListener("scroll", geometry, {passive: true, capture: true});
   window.visualViewport?.addEventListener("resize", geometry, {passive: true});

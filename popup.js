@@ -1,13 +1,16 @@
 "use strict";
 const toggle = document.getElementById("enabled");
+const completionToggle = document.getElementById("completion-enabled");
 const previewToggle = document.getElementById("preview-enabled");
 const previewMode = document.getElementById("preview-mode");
-chrome.storage.local.get({ enabled: true, previewEnabled: true, previewMode: "auto" }, (value) => {
+chrome.storage.local.get({ enabled: true, completionEnabled: true, previewEnabled: true, previewMode: "auto" }, (value) => {
   toggle.checked = value.enabled;
+  completionToggle.checked = value.completionEnabled;
   previewToggle.checked = value.previewEnabled;
   previewMode.value = value.previewMode;
 });
 toggle.addEventListener("change", () => chrome.storage.local.set({ enabled: toggle.checked }));
+completionToggle.addEventListener("change", () => chrome.storage.local.set({ completionEnabled: completionToggle.checked }));
 previewToggle.addEventListener("change", () => chrome.storage.local.set({ previewEnabled: previewToggle.checked }));
 previewMode.addEventListener("change", () => chrome.storage.local.set({ previewMode: previewMode.value }));
 const search = document.getElementById("search");

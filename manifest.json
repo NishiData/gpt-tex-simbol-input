@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
   "name": "TeX Symbol Input for ChatGPT",
-  "version": "1.2.2",
-  "description": "TeX記号変換・数式プレビューに加え、ChatGPTの回答と数式をブラウザ内にブックマークできます。",
+  "version": "1.3.0",
+  "description": "ChatGPTでTeX入力補完・記号変換・数式プレビュー・差分比較・回答と数式のブックマークができます。",
   "minimum_chrome_version": "109",
   "permissions": ["storage"],
   "background": {"service_worker": "background.js"},
   "content_scripts": [{
     "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-    "js": ["symbols.js", "content.js", "vendor/katex/katex.min.js", "preview-core.js", "preview.js", "bookmarks-core.js", "bookmarks-content.js"],
+    "js": ["symbols.js", "content.js", "completion-core.js", "completion.js", "vendor/katex/katex.min.js", "preview-core.js", "preview.js", "diff-core.js", "diff-ui.js", "bookmarks-core.js", "bookmarks-content.js"],
     "run_at": "document_idle"
   }],
   "action": {

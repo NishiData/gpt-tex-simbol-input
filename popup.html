@@ -9,10 +9,12 @@
   <script src="popup.js" defer></script>
 </head>
 <body>
-  <header><strong>TeX 記号入力</strong><span class="hint">v1.2.2</span></header>
+  <header><strong>TeX 記号入力</strong><span class="hint">v1.3.0</span></header>
   <p><a id="bookmarks-link" href="bookmarks.html" target="_blank" rel="noopener">☆ 回答・数式のブックマークを開く</a></p>
+  <p><a href="compare.html" target="_blank" rel="noopener">数式の差分比較を開く</a></p>
   <div class="settings">
     <label><input id="enabled" type="checkbox" checked> スペースで記号に変換</label>
+    <label><input id="completion-enabled" type="checkbox" checked> TeX入力補完（Tabで挿入・空欄移動）</label>
     <label><input id="preview-enabled" type="checkbox" checked> 入力中の数式をプレビュー</label>
     <label class="mode-label" for="preview-mode">プレビューする範囲</label>
     <select id="preview-mode">
@@ -22,7 +24,7 @@
     </select>
   </div>
   <p><code>\alpha</code> ＋ <kbd>Space</kbd> → <b>α</b></p>
-  <p class="hint">空白も入れたいときは、もう一度Space。<br><code>\frac{a}{b}</code> は入力中にプレビュー。<br>文章中の数式は <code>$…$</code> で囲みます。</p>
+  <p class="hint"><code>\fr</code> ＋ Tab → <code>\frac{a}{b}</code><br>↑↓で候補選択、Tab／Shift＋Tabで空欄移動。<br>Escで補完を終了。空白はもう一度Space。<br>文章中の数式は <code>$…$</code> で囲みます。</p>
   <input id="search" type="search" placeholder="コマンド・記号を検索" aria-label="コマンド・記号を検索">
   <div id="count" class="hint" aria-live="polite"></div>
   <div class="list"><table><thead><tr><th>コマンド</th><th>変換後</th></tr></thead><tbody id="symbols"></tbody></table></div>

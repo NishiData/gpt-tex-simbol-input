@@ -15,6 +15,7 @@ files = {
     "manifest.json", "README.md", "LICENSE", "PRIVACY.md", "CHANGELOG.md",
     "THIRD_PARTY_NOTICES.md", "popup.html", "popup.css", "popup.js",
     "bookmarks.html", "bookmarks.css", "bookmarks.js", "background.js",
+    "compare.html", "compare.css", "compare.js",
     "vendor/katex/LICENSE", "vendor/katex/NOTICE.txt",
 }
 for entry in manifest.get("content_scripts", []):
