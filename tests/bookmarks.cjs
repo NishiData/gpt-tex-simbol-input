@@ -1,0 +1,153 @@
+// Local browser fixture: tests our UI and storage interactions, not ChatGPT's live DOM.
+const path = require('node:path');
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const B = require('../bookmarks-core.js');
+const playwright = process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES
+  ? require(path.join(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES, 'playwright')) : require('playwright');
+const root = path.resolve(__dirname, '..');
+const base = {id:'test-1',kind:'formula',title:'分数',text:String.raw`\frac{a}{b}`,createdAt:1,sourceUrl:'https://chatgpt.com/c/test?secret=123#hash'};
+assert.equal(B.validate(base).sourceUrl,'https://chatgpt.com/c/test');
+for (const url of ['javascript:alert(1)','https://chatgpt.com.evil.test/c/x','https://evil.test/c/x','https://user@chatgpt.com/c/x','http://chatgpt.com/c/x','https://chatgpt.com/']) assert.equal(B.sourceURL(url),'');
+for (const invalid of [{...base,id:undefined},{...base,title:''},{...base,kind:'html'},{...base,text:'x'.repeat(8001)},{...base,createdAt:NaN}]) assert.throws(()=>B.validate(invalid));
+assert.throws(()=>B.parseBackup(JSON.stringify({format:'tex-symbol-bookmarks',version:1,bookmarks:[base,base]})));
+assert(B.matches(B.validate(base),'FRAC','formula'));
+// Validate the privileged handler independently from the page-side storage shim.
+let listener, opened = [];
+const runtime = {id:'test-extension',getURL:file=>'chrome-extension://test-extension/'+file,onMessage:{addListener:cb=>{listener=cb;}}};
+vm.runInNewContext(fs.readFileSync(path.join(root,'background.js'),'utf8'),{URL,chrome:{runtime,tabs:{create:(arg,cb)=>{opened.push(arg.url);cb();}}}});
+for(const sender of [{id:'other',url:'https://chatgpt.com/c/test'},{id:runtime.id,url:'https://evil.test/'},{id:runtime.id,url:'invalid'}]) listener({action:'openBookmarks'},sender,()=>assert.fail('untrusted sender'));
+assert.equal(opened.length,0);
+listener({action:'openBookmarks',url:'https://evil.test/'},{id:runtime.id,url:'https://chatgpt.com/c/test'},result=>assert.equal(result.ok,true));
+assert.deepEqual(opened,['chrome-extension://test-extension/bookmarks.html']);
+
+(async()=>{
+  const browser = await playwright.chromium.launch({executablePath:process.env.TEX_BROWSER_EXECUTABLE || undefined,headless:true,args:['--no-sandbox','--disable-gpu','--disable-software-rasterizer','--no-zygote']});
+  const context = await browser.newContext({viewport:{width:1100,height:850}});
+  // Simulate extension-local storage across tabs with callback errors and change events.
+  const stored = {}, requests = [], errors = [];
+  let quota = false;
+  await context.exposeBinding('testStorage',async({page},method,arg)=>{
+    if (method==='get') return arg===null ? structuredClone(stored) : typeof arg==='string' ? {[arg]:stored[arg]} : {...arg,...stored};
+    if (method==='set' && quota) return {error:'QUOTA_BYTES quota exceeded'};
+    const changes = {};
+    if (method==='set') for(const [key,value] of Object.entries(arg)) { changes[key]={oldValue:stored[key],newValue:value};stored[key]=value; }
+    if (method==='remove') { changes[arg]={oldValue:stored[arg]};delete stored[arg]; }
+    for(const p of context.pages()) await p.evaluate(changes=>globalThis.testStorageListeners?.forEach(cb=>cb(changes,'local')),changes);
+    return {};
+  });
+  await context.addInitScript(()=>{
+    globalThis.testStorageListeners=[];
+    globalThis.chrome={runtime:{getURL:file=>'https://extension.test/'+file,sendMessage:(message,cb)=>{globalThis.testMessage=message;cb({ok:true});}},storage:{local:{},onChanged:{addListener:cb=>testStorageListeners.push(cb)}}};
+    for(const method of ['get','set','remove']) chrome.storage.local[method]=(arg,cb)=>testStorage(method,arg).then(result=>{
+      if(result?.error) chrome.runtime.lastError={message:result.error};
+      cb?.(result); delete chrome.runtime.lastError;
+    });
+    Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{globalThis.copied=text;}}});
+  });
+  await context.route('**/*',route=>{
+    const url=new URL(route.request().url());
+    if(url.hostname==='chatgpt.com') return route.fulfill({contentType:'text/html',body:'<!doctype html><html lang="ja"><meta charset="utf-8"><title>分数の説明</title><style>body{max-width:760px;margin:40px auto;font:16px/1.7 system-ui}textarea{width:95%;height:80px;margin-top:30px}</style><article><div data-message-author-role="assistant" data-message-id="message-1"><div class="markdown"><p>分数の説明です。</p><p id="math-1"></p><p>もう一つの式：</p><p id="math-2"></p><pre><code>const x = 1;</code></pre></div></div></article><textarea aria-label="入力欄"></textarea></html>'});
+    if(url.hostname==='extension.test') {
+      const file=path.join(root,url.pathname);
+      if(!file.startsWith(root+path.sep) || !fs.existsSync(file)) return route.abort();
+      return route.fulfill({body:fs.readFileSync(file),contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'text/javascript'});
+    }
+    requests.push(url.href); return route.abort();
+  });
+  const page=await context.newPage(); page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('https://chatgpt.com/c/test');
+  const manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json')));
+  for(const file of manifest.content_scripts[0].js) await page.addScriptTag({path:path.join(root,file)});
+  await page.evaluate(()=>{
+    katex.render(String.raw`\frac{a}{b}`,document.getElementById('math-1'),{displayMode:true});
+    katex.render('x_i^2',document.getElementById('math-2'));
+  });
+  assert.deepEqual(stored,{},'visiting an answer never stores conversation contents');
+  await page.getByRole('button',{name:'一覧',exact:true}).click();
+  assert.deepEqual(await page.evaluate(()=>testMessage),{action:'openBookmarks'});
+  const ui=page.locator('#tex-bookmark-ui');
+  await page.getByRole('button',{name:'☆ 回答を保存',exact:true}).click();
+  assert.match(await ui.locator('pre').innerText(),/分数の説明です/);
+  assert.equal((await ui.locator('pre').innerText()).split(String.raw`\frac{a}{b}`).length,2,'one TeX copy, not duplicated MathML/HTML');
+  await ui.getByLabel('名前',{exact:true}).fill('分数の説明');
+  await ui.getByRole('button',{name:'保存',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('#tex-bookmark-ui').shadowRoot.querySelector('dialog').open);
+  assert.equal(Object.keys(stored).length,1);
+  const answer=Object.values(stored)[0];
+  assert.equal(answer.messageId,'message-1');assert.equal(answer.kind,'answer');
+  assert(!answer.text.includes('回答を保存'));assert(answer.text.includes('const x = 1;'));
+  await page.getByRole('button',{name:'数式を保存',exact:true}).click();
+  assert.equal(await ui.locator('option').count(),2);
+  assert.equal(await ui.locator('mfrac').count(),1);
+  await ui.getByLabel('保存する数式（2個）').selectOption('1');
+  assert.equal(await ui.locator('msubsup').count(),1);
+  await ui.getByLabel('保存する数式（2個）').selectOption('0');
+  await ui.getByLabel('名前',{exact:true}).fill('基本の分数');
+  quota=true;
+  await ui.getByRole('button',{name:'保存',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#tex-bookmark-ui').shadowRoot.querySelector('.status').textContent.includes('容量'));
+  assert.equal(Object.keys(stored).length,1,'failed save is never reported as saved');
+  quota=false;
+  await ui.getByRole('button',{name:'保存',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('#tex-bookmark-ui').shadowRoot.querySelector('dialog').open);
+  assert.equal(Object.keys(stored).length,2);
+  const formula=Object.values(stored).find(r=>r.kind==='formula');
+  const manager=await context.newPage(); manager.on('pageerror',e=>errors.push(e.message));
+  await manager.goto('https://extension.test/bookmarks.html');
+  await manager.waitForFunction(()=>document.querySelectorAll('.card').length===2);
+  await manager.getByLabel('種類で絞り込む').selectOption('formula');
+  assert.equal(await manager.locator('.card').count(),1);
+  await manager.getByRole('button',{name:'TeXをコピー'}).click();
+  assert.equal(await manager.evaluate(()=>copied),String.raw`\frac{a}{b}`);
+  await manager.getByLabel('ブックマークを検索').fill('FRAC');
+  assert.equal(await manager.locator('.card').count(),1);
+  await manager.getByLabel('ブックマークを検索').fill('存在しない');
+  assert.equal(await manager.locator('.card').count(),0);
+  await manager.getByLabel('ブックマークを検索').fill('');
+  await manager.getByRole('button',{name:'名前を変更'}).click();
+  await manager.getByLabel('ブックマークの名前').fill('比率 <img src=x onerror=alert(1)>');
+  await manager.getByRole('button',{name:'変更を保存'}).click();
+  await manager.waitForFunction(()=>document.querySelector('h2')?.textContent.startsWith('比率'));
+  assert.equal(await manager.locator('img').count(),0,'saved title stays plain text');
+  await manager.reload();
+  await manager.waitForFunction(()=>document.querySelectorAll('.card').length===2);
+  assert.equal(await manager.getByRole('link',{name:'元の会話を開く'}).first().getAttribute('href'),'https://chatgpt.com/c/test#tex-bookmark='+formula.id);
+  await page.evaluate(id=>{location.hash='tex-bookmark='+id;},formula.id);
+  await page.waitForFunction(()=>document.querySelector('#tex-bookmark-ui').shadowRoot.querySelector('.toast').textContent.includes('移動しました'));
+  const downloadPromise=manager.waitForEvent('download');
+  await manager.getByRole('button',{name:'バックアップ',exact:true}).click();
+  const download=await downloadPromise;
+  const backup=fs.readFileSync(await download.path(),'utf8');
+  assert.equal(B.parseBackup(backup).length,2);
+  await manager.getByLabel('種類で絞り込む').selectOption('formula');
+  await manager.getByRole('button',{name:'削除',exact:true}).click();
+  await manager.getByRole('button',{name:'やめる',exact:true}).click();
+  assert.equal(Object.keys(stored).length,2);
+  await manager.getByRole('button',{name:'削除',exact:true}).click();
+  await manager.getByRole('button',{name:'削除する',exact:true}).click();
+  await manager.waitForFunction(()=>document.querySelectorAll('.card').length===0);
+  assert.equal(Object.keys(stored).length,1);
+  await manager.locator('#import-file').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(backup)});
+  await manager.waitForFunction(()=>document.querySelector('#status').textContent.includes('1 件を復元しました'));
+  assert.equal(Object.keys(stored).length,2);
+  // Streaming/new answer and no-TeX fallback.
+  await page.evaluate(()=>{const answer=document.createElement('div');answer.dataset.messageAuthorRole='assistant';answer.textContent='数式のない回答';document.body.append(answer);});
+  await page.waitForFunction(()=>document.querySelectorAll('.tex-bookmark-bar').length===2);
+  await page.getByRole('button',{name:'数式を保存',exact:true}).last().click();
+  await page.waitForFunction(()=>document.querySelector('#tex-bookmark-ui').shadowRoot.querySelector('.toast').textContent.includes('TeX原文'));
+  assert.equal(Object.keys(stored).length,2);
+  if(process.env.TEX_SCREENSHOT_DIR) {
+    fs.mkdirSync(process.env.TEX_SCREENSHOT_DIR,{recursive:true});
+    await manager.getByLabel('種類で絞り込む').selectOption('all');
+    await manager.screenshot({path:path.join(process.env.TEX_SCREENSHOT_DIR,'bookmarks-light.png'),fullPage:true});
+    await manager.emulateMedia({colorScheme:'dark'});
+    await manager.setViewportSize({width:390,height:844});
+    await manager.screenshot({path:path.join(process.env.TEX_SCREENSHOT_DIR,'bookmarks-narrow.png'),fullPage:true});
+  }
+  assert.deepEqual(requests,[],'no external resources requested');
+  assert.deepEqual(errors,[],'no uncaught browser errors');
+  console.log('Chromium '+browser.version()+': bookmark save, TeX extraction, quota errors, search/filter, copy, rename, persistence, source jump, delete, backup/restore, dynamic answers and safe text passed.');
+  await browser.close();
+})().catch(e=>{console.error(e);process.exit(1);});

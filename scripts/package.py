@@ -14,6 +14,7 @@ if not re.fullmatch(r"\d+(?:\.\d+){0,3}", version):
 files = {
     "manifest.json", "README.md", "LICENSE", "PRIVACY.md", "CHANGELOG.md",
     "THIRD_PARTY_NOTICES.md", "popup.html", "popup.css", "popup.js",
+    "bookmarks.html", "bookmarks.css", "bookmarks.js", "background.js",
     "vendor/katex/LICENSE", "vendor/katex/NOTICE.txt",
 }
 for entry in manifest.get("content_scripts", []):

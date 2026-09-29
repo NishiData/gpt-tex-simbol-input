@@ -89,7 +89,7 @@ for (const [key, value] of Object.entries(symbols)) {
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
 assert.deepEqual(manifest.permissions, ['storage']);
-for (const file of [...manifest.content_scripts[0].js, manifest.action.default_popup]) {
+for (const file of [...manifest.content_scripts[0].js, manifest.action.default_popup, manifest.background.service_worker]) {
   assert(fs.existsSync(path.join(root, file)), file);
 }
 console.log(`${count} behavior checks passed; ${Object.keys(symbols).length} symbols; manifest valid.`);
