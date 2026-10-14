@@ -21,6 +21,13 @@ button:disabled { opacity:.55; cursor:wait; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:16px; overflow-wrap:anywhere; }
 .meta { color:var(--muted); font-size:12px; margin:0 0 6px; }
 .card h2 { font-size:18px; margin:0 0 14px; }
+.classification-labels { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.classification-labels button { color:var(--accent); background:var(--bg); font-size:12px; padding:3px 10px; border-radius:20px; }
+.classification-form { margin:12px 0; padding:16px; background:var(--bg); border-radius:10px; }
+.classification-form label { display:block; font-size:13px; margin:8px 0 4px; }
+.classification-form input { width:100%; }
+.classification-form p { font-size:12px; }
+.classification-form button { margin-right:8px; }
 .formula { overflow:auto; padding:12px 0 20px; font-size:22px; }
 pre { font:13px/1.7 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere; max-height:360px; overflow:auto; margin:8px 0 16px; padding:12px; background:var(--bg); border-radius:8px; }
 summary { cursor:pointer; color:var(--muted); font-size:13px; }
@@ -31,4 +38,4 @@ a { color:var(--accent); }
 .delete-confirm { margin:10px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .delete-confirm[hidden] { display:none; }
 footer { margin-top:36px; padding-top:18px; border-top:1px solid var(--line); font-size:12px; }
-@media(max-width:520px) { main { padding:24px 16px; } .card { padding:16px; } }
+@media(max-width:520px) { main { padding:24px 16px; } .card { padding:16px; } .filters select { flex:1; min-width:0; max-width:100%; } #search { flex-basis:100%; } }

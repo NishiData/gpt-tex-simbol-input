@@ -1,6 +1,6 @@
 # プライバシーと権限
 
-対象: TeX Symbol Input for ChatGPT v1.3.0
+対象: TeX Symbol Input for ChatGPT v1.4.0
 
 ## 読み取る内容
 
@@ -29,7 +29,7 @@
 | `completionEnabled` | 入力補完の有効／無効 |
 | `previewEnabled` | プレビューの有効／無効 |
 | `previewMode` | プレビューする範囲 |
-| `texBookmark:<ID>` | 明示的に保存した回答または数式、名前、保存日時、会話URL・タイトル、回答ID |
+| `texBookmark:<ID>` | 明示的に保存した回答または数式、名前、分類、タグ、保存日時、会話URL・タイトル、回答ID |
 
 入力欄の下書き・検索語は保存しません。クラウド同期は使用していません。ブックマークはChatGPTアカウント別に分離しないため、同じブラウザプロファイルの利用者は閲覧できます。
 

@@ -25,6 +25,14 @@
     article.append(node("p", `${record.kind === "formula" ? "数式" : "回答"} · ${new Date(record.createdAt).toLocaleString("ja-JP")}${record.sourceTitle ? " · " + record.sourceTitle : ""}`, "meta"));
     const heading = node("h2", record.title);
     article.append(heading);
+    const labels = node("div", null, "classification-labels");
+    labels.append(button(record.category || "未分類", () => {
+      $("category").value = record.category ? "value:" + record.category : "uncategorized"; render();
+    }));
+    for (const tag of record.tags) labels.append(button("#" + tag, () => {
+      $("tag").value = "value:" + tag; render();
+    }));
+    article.append(labels);
     if (record.kind === "formula") {
       const preview = node("div", null, "formula");
       B.renderFormula(record.text, preview); article.append(preview);
@@ -66,24 +74,74 @@
     confirmation.append(node("span", "このブックマークを削除しますか？"), button("削除する", async () => {
       await B.remove(record.id); await refresh(); status("削除しました。");
     }), button("やめる", () => { confirmation.hidden = true; }));
-    actions.append(rename, button("削除", () => { confirmation.hidden = false; }));
+    const classify = button("分類・タグを編集", () => {
+      if (article.querySelector("form")) return;
+      const form = node("form", null, "classification-form");
+      const categoryLabel = node("label", "分類（空欄で未分類）"), category = node("input");
+      category.id = "category-" + record.id; categoryLabel.htmlFor = category.id;
+      category.value = record.category; category.maxLength = B.MAX_CATEGORY;
+      category.placeholder = "例：モジュラー対称性"; category.setAttribute("list", "category-suggestions");
+      const tagsLabel = node("label", "タグ（カンマ区切り）"), tags = node("input");
+      tags.id = "tags-" + record.id; tagsLabel.htmlFor = tags.id;
+      tags.value = record.tags.join(", "); tags.maxLength = 840; tags.placeholder = "例：定義, 導出, 重要";
+      const submit = node("button", "分類を保存"); submit.type = "submit";
+      const cancel = button("キャンセル", () => form.remove());
+      form.append(categoryLabel, category, tagsLabel, tags,
+        node("p", "分類は60文字、タグは各40文字・20個まで。空欄にすると解除できます。", "muted"), submit, cancel);
+      form.addEventListener("submit", async event => {
+        event.preventDefault(); submit.disabled = true; cancel.disabled = true;
+        try {
+          const current = await B.get(record.id);
+          if (!current) throw new Error("このブックマークは削除されています。");
+          await B.save({...current, category:category.value, tags:B.parseTags(tags.value)});
+          await refresh(); status("分類・タグを保存しました。");
+        } catch (e) { status(e.message, true); }
+        finally { submit.disabled = false; cancel.disabled = false; }
+      });
+      labels.after(form); category.focus();
+    });
+    actions.append(rename, classify, button("削除", () => { confirmation.hidden = false; }));
     article.append(actions, confirmation);
     return article;
   }
   function render() {
-    const visible = records.filter(r => B.matches(r, $("search").value, $("kind").value));
+    const visible = records.filter(r => B.matches(r, $("search").value, $("kind").value, $("category").value, $("tag").value));
     $("count").textContent = `${visible.length} 件 / 全 ${records.length} 件`;
     $("list").replaceChildren(...visible.map(card));
     $("empty").hidden = !!visible.length;
     $("empty").textContent = records.length ? "条件に一致するブックマークがありません。" : "まだブックマークはありません。ChatGPTの回答の下にある「回答を保存」「数式を保存」から追加できます。";
   }
+  function updateFilters() {
+    const scoped = records.filter(r => $("kind").value === "all" || r.kind === $("kind").value);
+    for (const field of ["category", "tag"]) {
+      const select = $(field), previous = select.value, counts = new Map();
+      for (const record of scoped) for (const label of field === "category" ? [record.category].filter(Boolean) : record.tags) {
+        counts.set(label, (counts.get(label) || 0) + 1);
+      }
+      const all = node("option", field === "category" ? "すべての分類" : "すべてのタグ"); all.value = "all";
+      select.replaceChildren(all);
+      if (field === "category") {
+        const empty = node("option", `未分類 (${scoped.filter(r => !r.category).length})`);
+        empty.value = "uncategorized"; select.append(empty);
+      }
+      for (const [label, count] of [...counts].sort((a, b) => a[0].localeCompare(b[0], "ja"))) {
+        const option = node("option", `${label} (${count})`); option.value = "value:" + label; select.append(option);
+      }
+      select.value = [...select.options].some(option => option.value === previous) ? previous : "all";
+    }
+    $("category-suggestions").replaceChildren(...[...new Set(records.map(r => r.category).filter(Boolean))].sort().map(name => {
+      const option = node("option"); option.value = name; return option;
+    }));
+  }
   async function refresh() {
     const version = ++refreshVersion, result = await B.list();
     if (version !== refreshVersion) return;
-    records = result; render();
+    records = result; updateFilters(); render();
   }
   $("search").addEventListener("input", render);
-  $("kind").addEventListener("change", render);
+  $("kind").addEventListener("change", () => { updateFilters(); render(); });
+  $("category").addEventListener("change", render);
+  $("tag").addEventListener("change", render);
   $("export").addEventListener("click", async () => {
     try {
       const latest = await B.list();

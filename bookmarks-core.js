@@ -3,6 +3,16 @@
   "use strict";
   const PREFIX = "texBookmark:";
   const MAX_TEXT = 100000, MAX_TEX = 8000, MAX_IMPORT = 2000;
+  const MAX_CATEGORY = 60, MAX_TAG = 40, MAX_TAGS = 20;
+  function classification(category = "", tags = []) {
+    if (typeof category !== "string" || category.trim().length > MAX_CATEGORY ||
+        !Array.isArray(tags) || tags.length > MAX_TAGS ||
+        tags.some(tag => typeof tag !== "string" || tag.trim().length > MAX_TAG)) {
+      throw new Error("分類は60文字以内、タグは各40文字以内・20個までにしてください。");
+    }
+    return {category: category.trim(), tags: [...new Set(tags.map(tag => tag.trim()).filter(Boolean))]};
+  }
+  function parseTags(text) { return classification("", text.split(/[,、，\n]/).filter(tag => tag.trim())).tags; }
   function sourceURL(value) {
     try {
       const url = new URL(value);
@@ -23,7 +33,8 @@
     return {id: value.id, kind: value.kind, title: value.title.trim(), text: value.text,
       createdAt: value.createdAt, sourceUrl: sourceURL(value.sourceUrl),
       sourceTitle: typeof value.sourceTitle === "string" ? value.sourceTitle.slice(0, 200) : "",
-      messageId: typeof value.messageId === "string" ? value.messageId.slice(0, 160) : ""};
+      messageId: typeof value.messageId === "string" ? value.messageId.slice(0, 160) : "",
+      ...classification(value.category, value.tags)};
   }
   function storage(method, argument) {
     return new Promise((resolve, reject) => {
@@ -56,9 +67,11 @@
     try { return validate(result[PREFIX + id]); } catch { return null; }
   }
   function create(fields) { return validate({...fields, id: crypto.randomUUID(), createdAt: Date.now()}); }
-  function matches(record, query, kind = "all") {
+  function matches(record, query, kind = "all", category = "all", tag = "all") {
     return (kind === "all" || record.kind === kind) &&
-      `${record.title}\n${record.text}\n${record.sourceTitle}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+      (category === "all" || (category === "uncategorized" ? !record.category : record.category === category.slice(6))) &&
+      (tag === "all" || (record.tags || []).includes(tag.slice(6))) &&
+      `${record.title}\n${record.text}\n${record.sourceTitle}\n${record.category || ""}\n${(record.tags || []).join("\n")}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   }
   function parseBackup(text) {
     if (text.length > 5000000) throw new Error("バックアップは5 MB以内にしてください。");
@@ -79,6 +92,7 @@
     } catch { target.textContent = "この式は描画できません。下のTeX原文を利用できます。"; }
   }
   const api = Object.freeze({PREFIX, MAX_TEXT, MAX_TEX, sourceURL, validate, list, save, get, create,
+    MAX_CATEGORY, MAX_TAG, MAX_TAGS, classification, parseTags,
     remove: id => storage("remove", PREFIX + id), matches, parseBackup, renderFormula});
   globalThis.TEX_BOOKMARKS = api;
   if (typeof module === "object" && module.exports) module.exports = api;

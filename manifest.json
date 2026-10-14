@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TeX Symbol Input for ChatGPT",
-  "version": "1.3.0",
-  "description": "ChatGPTでTeX入力補完・記号変換・数式プレビュー・差分比較・回答と数式のブックマークができます。",
+  "version": "1.4.0",
+  "description": "ChatGPTでTeX入力補完・記号変換・数式プレビュー・差分比較・回答と数式のブックマーク・分類とタグ管理ができます。",
   "minimum_chrome_version": "109",
   "permissions": ["storage"],
   "background": {"service_worker": "background.js"},

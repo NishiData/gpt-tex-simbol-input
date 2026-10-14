@@ -16,7 +16,8 @@
       <div class="backup"><button id="export" type="button">バックアップ</button><button id="import" type="button">復元</button><input id="import-file" type="file" accept="application/json,.json" hidden></div>
     </header>
     <p class="intro">残しておきたい回答と数式を、いつでも手元に。</p>
-    <div class="filters"><input id="search" type="search" placeholder="名前・本文・TeXで検索" aria-label="ブックマークを検索"><select id="kind" aria-label="種類で絞り込む"><option value="all">すべて</option><option value="answer">回答</option><option value="formula">数式</option></select></div>
+    <div class="filters"><input id="search" type="search" placeholder="名前・本文・TeX・分類・タグで検索" aria-label="ブックマークを検索"><select id="kind" aria-label="種類で絞り込む"><option value="all">すべて</option><option value="answer">回答</option><option value="formula">数式</option></select><select id="category" aria-label="分類で絞り込む"><option value="all">すべての分類</option></select><select id="tag" aria-label="タグで絞り込む"><option value="all">すべてのタグ</option></select></div>
+    <datalist id="category-suggestions"></datalist>
     <p id="status" role="status" aria-live="polite"></p>
     <p id="count" class="muted"></p>
     <div id="list"></div>

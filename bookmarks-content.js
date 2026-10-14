@@ -114,6 +114,19 @@
     const heading = node("h2", kind === "formula" ? "数式をブックマーク" : "回答をブックマーク");
     const titleLabel = node("label", "名前"), title = node("input");
     title.id = "bookmark-title"; titleLabel.htmlFor = title.id; title.maxLength = 120; title.required = true;
+    const categoryLabel = node("label", "分類（任意）"), category = node("input");
+    category.id = "bookmark-category"; categoryLabel.htmlFor = category.id; category.maxLength = B.MAX_CATEGORY;
+    category.placeholder = "例：モジュラー対称性";
+    const suggestions = node("datalist"); suggestions.id = "bookmark-categories";
+    category.setAttribute("list", suggestions.id);
+    B.list().then(records => {
+      for (const name of [...new Set(records.map(r => r.category).filter(Boolean))].sort()) {
+        const option = node("option"); option.value = name; suggestions.append(option);
+      }
+    }).catch(e => { error.textContent = e.message; });
+    const tagsLabel = node("label", "タグ（カンマ区切り・任意）"), tags = node("input");
+    tags.id = "bookmark-tags"; tagsLabel.htmlFor = tags.id; tags.maxLength = 840;
+    tags.placeholder = "例：定義, 導出, 重要";
     const preview = node("div", null, "preview"), raw = node("pre");
     const error = node("p", "", "status"); error.setAttribute("role", "status");
     const submit = node("button", "保存", "save"); submit.type = "submit";
@@ -194,12 +207,12 @@
       form.append(label, picker);
     }
     const actions = node("div", null, "actions"); actions.append(cancel, submit);
-    form.append(titleLabel, title, preview, raw,
+    form.append(titleLabel, title, categoryLabel, category, suggestions, tagsLabel, tags, preview, raw,
       node("p", "選んだ内容をこのブラウザ内に保存します。回答は保存時点の内容です。" + (origin.sourceUrl ? "" : " このページには会話URLがないため、元の会話へのリンクは保存できません。"), "hint"), error, actions);
     form.addEventListener("submit", async event => {
       event.preventDefault(); submit.disabled = true; cancel.disabled = true;
       try {
-        await B.save(B.create({kind, title:title.value, text, ...origin}));
+        await B.save(B.create({kind, title:title.value, text, ...origin, category:category.value, tags:B.parseTags(tags.value)}));
         dialog.close(); notify("ブックマークに保存しました。「一覧」から確認できます。");
       } catch (e) { error.textContent = e.message; }
       finally { submit.disabled = false; cancel.disabled = false; }
